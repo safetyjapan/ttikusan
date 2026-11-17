@@ -94,8 +94,8 @@ footer{padding:24px 20px;font-size:1rem;color:var(--sub);text-align:center}
 </div></header>
 
 <section class="lead"><div class="wrap">
-  <h1>必要な資材を、そのまま注文できます。</h1>
-  <p>下の「カートに入れる」を押して、いちばん下の「注文へ進む」を押すだけです。わからないときは、上のお電話番号までどうぞ。</p>
+  <h1 id="leadTitle">農家のみなさまへ。<br>必要な資材を、そのまま注文できます。</h1>
+  <p id="leadText">下の「カートに入れる」を押して、いちばん下の「注文へ進む」を押すだけです。わからないときは、上のお電話番号までどうぞ。</p>
 </div></section>
 
 <main class="wrap">
@@ -128,152 +128,129 @@ footer{padding:24px 20px;font-size:1rem;color:var(--sub);text-align:center}
 
 <script>
 /* ===== 設定 ===== */
-// 農業用に新しく作ったスプレッドシート／Apps Scriptの /exec URL を入れてください。
-// 空欄の間は下の SAMPLE を表示し、注文はコンソールに出るだけです（送信されません）。
+// Apps Script を公開した /exec のURLを入れてください。空欄のあいだはサンプルを表示します。
 const CONFIG = { GAS_URL: 'https://script.google.com/macros/s/AKfycbxn-WWcpQ1Y_Yhha7BIz4AKqcoW5FkLglWpMiqj41RGmMinaVx2KSOg5n6dTWWiQapW/exec' };
-const TAX = 0.10;
-const COMPANY = {
-  name:'セーフティージャパン株式会社',
-  tel:'0995-57-7171', hours:'平日9時～17時',
-  address:'〒899-4302　鹿児島県霧島市国分台明寺字下村777-7',
-  email:'safetyjapan.mk@gmail.com'
-};
-
-/* ===== 商品データ（サンプル） =====
-   catch … 売り文句（商品ごとに自由に書ける。黄色い帯で大きく表示）
-   desc  … 補足説明
-   同じ variant_group の行は、プルダウンで規格を選べる1商品にまとまります。
-   スプレッドシートの列は catch を足すだけでOK（列名: catch）。 */
-const SAMPLE = [
-  {id:101,name:'防草シート',category:'草対策',icon:'🌿',price:5800,variant_group:'bousou',attr1_name:'幅',attr1_value:'1m×50m',spec:'1巻',catch:'草取りの回数がぐっと減ります。畑のあぜ道に。',desc:'光を通しにくい黒色。破れにくい丈夫なタイプです。'},
-  {id:102,name:'防草シート',category:'草対策',icon:'🌿',price:10800,variant_group:'bousou',attr1_name:'幅',attr1_value:'2m×50m',spec:'1巻',catch:'草取りの回数がぐっと減ります。畑のあぜ道に。',desc:'光を通しにくい黒色。破れにくい丈夫なタイプです。'},
-  {id:110,name:'マルチシート（黒）',category:'畑づくり',icon:'🥔',price:3200,variant_group:'multi',attr1_name:'幅',attr1_value:'95cm×200m',spec:'1巻',catch:'地温が上がり、雑草もおさえます。野菜の育ちがちがいます。',desc:'穴なしの黒マルチ。'},
-  {id:111,name:'マルチシート（黒）',category:'畑づくり',icon:'🥔',price:3800,variant_group:'multi',attr1_name:'幅',attr1_value:'135cm×200m',spec:'1巻',catch:'地温が上がり、雑草もおさえます。野菜の育ちがちがいます。',desc:'穴なしの黒マルチ。'},
-  {id:120,name:'ネット（防鳥・防獣）',category:'鳥獣対策',icon:'🐗',price:4200,variant_group:'net',attr1_name:'大きさ',attr1_value:'2m×50m',spec:'1巻',catch:'大事な作物を、鳥やけものから守ります。',desc:'細かい目で小さな鳥も通しません。'},
-  {id:121,name:'ネット（防鳥・防獣）',category:'鳥獣対策',icon:'🐗',price:7800,variant_group:'net',attr1_name:'大きさ',attr1_value:'4m×50m',spec:'1巻',catch:'大事な作物を、鳥やけものから守ります。',desc:'細かい目で小さな鳥も通しません。'},
-  {id:130,name:'コンテナ（収穫用）',category:'収穫・出荷',icon:'🧺',price:480,spec:'1個',catch:'重ねても崩れにくく、持ち運びがラクです。',desc:'水洗いできて清潔。'},
-  {id:140,name:'ブルーシート',category:'養生・保管',icon:'🟦',price:2100,variant_group:'blue',attr1_name:'大きさ',attr1_value:'3.6×5.4m',spec:'#2000 厚手',catch:'肥料や資材の雨よけに。ひとつあると安心です。',desc:'丈夫な厚手タイプ。'},
-  {id:141,name:'ブルーシート',category:'養生・保管',icon:'🟦',price:3600,variant_group:'blue',attr1_name:'大きさ',attr1_value:'5.4×7.2m',spec:'#2000 厚手',catch:'肥料や資材の雨よけに。ひとつあると安心です。',desc:'丈夫な厚手タイプ。'}
-];
-
-/* ===== 状態 ===== */
-let all=[], items=[], cat='すべて', sel1={}, cart={}, qtys={};
-const yen=n=>'¥'+(Number(n)||0).toLocaleString('ja-JP');
-const esc=s=>(s==null?'':String(s)).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-const $=id=>document.getElementById(id);
-const label=p=>[p.attr1_value,p.attr2_value].filter(Boolean).join('・');
-
-function build(){
-  const gs={}; items=[];
-  all.forEach(p=>{
-    const g=(p.variant_group||'').toString().trim();
-    if(!g){items.push({group:false,p});return}
-    if(!gs[g]){gs[g]={group:true,id:g,vs:[],n1:p.attr1_name||'規格'};items.push(gs[g])}
-    gs[g].vs.push(p);
-  });
-  Object.values(gs).forEach(g=>{
-    g.opts=[...new Set(g.vs.map(v=>v.attr1_value))];
-    if(!g.opts.includes(sel1[g.id]))sel1[g.id]=g.opts[0];
-  });
+let TAX = 0.10;
+const SAMPLE = {"settings": {"company_name": "セーフティージャパン株式会社", "tel": "0995-57-7171", "hours": "平日9時～17時", "address": "〒899-4302　鹿児島県霧島市国分台明寺字下村777-7", "email": "safetyjapan.mk@gmail.com", "tax_rate": 0.1, "lead_title": "農家のみなさまへ。\n必要な資材を、そのまま注文できます。", "lead_text": "下の「カートに入れる」を押して、いちばん下の「注文へ進む」を押すだけです。わからないときは、上のお電話番号までどうぞ。"}, "products": [{"id": "P001", "name": "防草シート", "category": "草対策", "catch": "草取りの回数が、ぐっと減ります。あぜ道・果樹園の足もとに。", "desc": "光を通しにくい黒色。破れにくく、数年使えます。", "image_url": "", "icon": "🌿", "label1": "幅", "label2": "長さ", "link_url": "", "consult": false, "variants": [{"v1": "1m", "v2": "50m", "price": 5800, "spec": "1巻", "stock": "○"}, {"v1": "1m", "v2": "100m", "price": 10800, "spec": "1巻", "stock": "○"}, {"v1": "2m", "v2": "50m", "price": 10800, "spec": "1巻", "stock": "○"}, {"v1": "2m", "v2": "100m", "price": 19800, "spec": "1巻", "stock": "△"}]}, {"id": "P002", "name": "マルチシート（黒）", "category": "畑づくり", "catch": "地温が上がり、雑草もおさえます。野菜の育ちがちがいます。", "desc": "穴なしの黒マルチ。", "image_url": "", "icon": "🥔", "label1": "幅", "label2": "", "link_url": "", "consult": false, "variants": [{"v1": "95cm", "v2": "", "price": 3200, "spec": "200m巻", "stock": "○"}, {"v1": "135cm", "v2": "", "price": 3800, "spec": "200m巻", "stock": "○"}, {"v1": "150cm", "v2": "", "price": 4200, "spec": "200m巻", "stock": "×"}]}, {"id": "P003", "name": "防鳥・防獣ネット", "category": "鳥獣対策", "catch": "大事な作物を、鳥やけものから守ります。", "desc": "細かい目で小さな鳥も通しません。", "image_url": "", "icon": "🐗", "label1": "大きさ", "label2": "", "link_url": "", "consult": false, "variants": [{"v1": "2m×50m", "v2": "", "price": 4200, "spec": "1巻", "stock": "○"}, {"v1": "4m×50m", "v2": "", "price": 7800, "spec": "1巻", "stock": "○"}]}, {"id": "P004", "name": "収穫コンテナ", "category": "収穫・出荷", "catch": "重ねても崩れにくく、持ち運びがラクです。", "desc": "水洗いできて清潔。", "image_url": "", "icon": "🧺", "label1": "", "label2": "", "link_url": "", "consult": false, "variants": [{"v1": "", "v2": "", "price": 480, "spec": "1個", "stock": "○"}]}, {"id": "P005", "name": "ブルーシート", "category": "養生・保管", "catch": "肥料や資材の雨よけに。ひとつあると安心です。", "desc": "丈夫な厚手タイプ。", "image_url": "", "icon": "🟦", "label1": "厚さ", "label2": "大きさ", "link_url": "", "consult": false, "variants": [{"v1": "#2000", "v2": "3.6×5.4m", "price": 3600, "spec": "", "stock": "○"}, {"v1": "#2000", "v2": "5.4×7.2m", "price": 5200, "spec": "", "stock": "○"}, {"v1": "#3000", "v2": "3.6×5.4m", "price": 6200, "spec": "", "stock": "○"}, {"v1": "#3000", "v2": "5.4×7.2m", "price": 8800, "spec": "", "stock": "○"}]}, {"id": "P006", "name": "支柱（合成）", "category": "畑づくり", "catch": "トマト・きゅうりの支えに。さびず、長持ちします。", "desc": "", "image_url": "", "icon": "🌱", "label1": "太さ", "label2": "長さ", "link_url": "", "consult": false, "variants": [{"v1": "11mm", "v2": "1.5m", "price": 980, "spec": "10本", "stock": "○"}, {"v1": "11mm", "v2": "1.8m", "price": 1180, "spec": "10本", "stock": "○"}, {"v1": "16mm", "v2": "1.8m", "price": 1580, "spec": "10本", "stock": "○"}, {"v1": "16mm", "v2": "2.1m", "price": 1880, "spec": "10本", "stock": "○"}]}, {"id": "P007", "name": "ビニールハウス用フィルム", "category": "畑づくり", "catch": "ハウスの大きさに合わせて、お見積りします。", "desc": "厚み・幅・長さをご相談ください。", "image_url": "", "icon": "🏠", "label1": "", "label2": "", "link_url": "", "consult": true, "variants": [{"v1": "", "v2": "", "price": null, "spec": "", "stock": "○"}]}]};
+let DATA = SAMPLE, all = [], cat = 'すべて', sel1 = {}, sel2 = {}, cart = {}, qtys = {}, TEL = '';
+const yen = n => '¥' + (Number(n) || 0).toLocaleString('ja-JP');
+const esc = s => (s == null ? '' : String(s)).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+const $ = id => document.getElementById(id);
+const vlabel = v => [v.v1, v.v2].filter(Boolean).join('・');
+const keyOf = (p, v) => p.id + '|' + v.v1 + '|' + v.v2;
+const opts1 = p => [...new Set(p.variants.map(v => v.v1))];
+const opts2 = p => [...new Set(p.variants.filter(v => v.v1 === sel1[p.id]).map(v => v.v2))];
+function fix(p){
+  const o1 = opts1(p); if (!o1.includes(sel1[p.id])) sel1[p.id] = o1[0];
+  const o2 = opts2(p); if (!o2.includes(sel2[p.id])) sel2[p.id] = o2[0];
 }
-const cur=it=>it.group?it.vs.find(v=>v.attr1_value===sel1[it.id]):it.p;
-const catOf=it=>it.group?it.vs[0].category:it.p.category;
+const curV = p => p.variants.find(v => v.v1 === sel1[p.id] && v.v2 === sel2[p.id]);
 
 function renderCats(){
-  const cs=['すべて',...new Set(items.map(catOf).filter(Boolean))];
-  $('cats').innerHTML=cs.map(c=>`<button class="cat" aria-pressed="${c===cat}" onclick="setCat('${esc(c)}')">${esc(c)}</button>`).join('');
+  const cs = ['すべて', ...new Set(all.map(p => p.category).filter(Boolean))];
+  $('cats').innerHTML = cs.map(c => `<button class="cat" aria-pressed="${c===cat}" onclick="setCat(${JSON.stringify(c).replace(/"/g,'&quot;')})">${esc(c)}</button>`).join('');
 }
-function setCat(c){cat=c;renderCats();renderGrid()}
-function pick(g,v){sel1[g]=v;renderGrid()}
+function setCat(c){ cat = c; renderCats(); renderGrid(); }
+function pick(i, n, val){ const p = all[i]; (n === 1 ? sel1 : sel2)[p.id] = val; fix(p); renderGrid(); }
 
 function renderGrid(){
-  const list=items.filter(it=>cat==='すべて'||catOf(it)===cat);
-  $('grid').innerHTML=list.map(it=>{
-    const p=cur(it), base=it.group?it.vs[0]:it.p, inC=p&&!!cart[p.id];
-    const q=p?(inC?cart[p.id].qty:(qtys[p.id]||1)):1;
-    const photo=base.image_url?`<img src="${esc(base.image_url)}" alt="${esc(base.name)}" loading="lazy">`:`<span aria-hidden="true">${esc(base.icon||'📦')}</span>`;
-    const sel=it.group?`<div class="field"><label for="s-${esc(it.id)}">${esc(it.n1)}を選んでください</label>
-      <select id="s-${esc(it.id)}" onchange="pick('${esc(it.id)}',this.value)">${it.opts.map(o=>`<option value="${esc(o)}"${o===sel1[it.id]?' selected':''}>${esc(o)}</option>`).join('')}</select></div>`:'';
-    return `<article class="card${inC?' in':''}">
-      <div class="photo">${photo}</div>
-      <div class="body">
-        <h2 class="name">${esc(base.name)}</h2>
-        ${base.catch?`<div class="pitch">${esc(base.catch)}</div>`:''}
-        ${base.desc?`<p class="desc">${esc(base.desc)}</p>`:''}
-        ${sel}
-        ${p?`<div class="price">${yen(p.price)}<small>（税別）</small></div>${p.spec?`<div class="spec">${esc(p.spec)}</div>`:''}
-        <div class="qty"><b>数量</b>
-          <button class="qb" aria-label="1つ減らす" onclick="setQ(${p.id},${q}-1)">−</button>
-          <input class="qn" type="number" min="1" value="${q}" aria-label="数量" onchange="setQ(${p.id},this.value)">
-          <button class="qb" aria-label="1つ増やす" onclick="setQ(${p.id},${q}+1)">＋</button></div>`
-        :`<div class="none">この組み合わせは、いま扱っていません。</div>`}
-      </div>
-      <div class="foot">
-        ${base.link_url?`<a class="link" href="${esc(base.link_url)}" target="_blank" rel="noopener">くわしく見る</a>`:''}
-        ${p?`<button class="btn${inC?' in':''}" onclick="toggle(${p.id})">${inC?'✓ カートに入っています（押すと取り消し）':'カートに入れる'}</button>`:'<button class="btn" disabled>選べません</button>'}
-      </div></article>`;
+  $('grid').innerHTML = all.map((p, i) => {
+    if (cat !== 'すべて' && p.category !== cat) return '';
+    const v = curV(p), k = v ? keyOf(p, v) : '', inC = !!cart[k];
+    const q = inC ? cart[k].qty : (qtys[k] || 1);
+    const photo = p.image_url ? `<img src="${esc(p.image_url)}" alt="${esc(p.name)}" loading="lazy">` : `<span aria-hidden="true">${esc(p.icon || '📦')}</span>`;
+    const sel = (n, label, list, cur) => label && list.length ? `<div class="field"><label for="s${n}-${i}">${esc(label)}を選んでください</label>
+      <select id="s${n}-${i}" onchange="pick(${i},${n},this.value)">${list.map(o => `<option value="${esc(o)}"${o===cur?' selected':''}>${esc(o)}</option>`).join('')}</select></div>` : '';
+    const call = p.consult || (v && v.price == null);
+    let mid = '', btn = '';
+    if (!v){ mid = '<div class="none">この組み合わせは、いま扱っていません。</div>'; btn = '<button class="btn" disabled>選べません</button>'; }
+    else if (call){
+      mid = '<div class="price" style="font-size:1.3rem">価格はお電話でご相談ください</div>' + (v.spec ? `<div class="spec">${esc(v.spec)}</div>` : '');
+      btn = `<a class="btn" style="display:flex;align-items:center;justify-content:center;text-decoration:none" href="tel:${esc(TEL.replace(/[^0-9+]/g,''))}">📞 電話で相談する（${esc(TEL)}）</a>`;
+    } else {
+      mid = `<div class="price">${yen(v.price)}<small>（税別）</small></div>${v.spec ? `<div class="spec">${esc(v.spec)}</div>` : ''}${v.stock === '△' ? '<div class="none" style="color:var(--amber-tx)">残りわずかです</div>' : ''}`;
+      if (v.stock === '×') btn = '<button class="btn" disabled>品切れ中です</button>';
+      else {
+        mid += `<div class="qty"><b>数量</b>
+          <button class="qb" aria-label="1つ減らす" onclick="setQ(${i},${q}-1)">−</button>
+          <input class="qn" type="number" min="1" value="${q}" aria-label="数量" onchange="setQ(${i},this.value)">
+          <button class="qb" aria-label="1つ増やす" onclick="setQ(${i},${q}+1)">＋</button></div>`;
+        btn = `<button class="btn${inC?' in':''}" onclick="toggle(${i})">${inC ? '✓ カートに入っています（押すと取り消し）' : 'カートに入れる'}</button>`;
+      }
+    }
+    return `<article class="card${inC?' in':''}"><div class="photo">${photo}</div><div class="body">
+      <h2 class="name">${esc(p.name)}</h2>
+      ${p.catch ? `<div class="pitch">${esc(p.catch)}</div>` : ''}
+      ${p.desc ? `<p class="desc">${esc(p.desc)}</p>` : ''}
+      ${sel(1, p.label1, opts1(p), sel1[p.id])}${sel(2, p.label2, opts2(p), sel2[p.id])}${mid}</div>
+      <div class="foot">${p.link_url ? `<a class="link" href="${esc(p.link_url)}" target="_blank" rel="noopener">くわしく見る</a>` : ''}${btn}</div></article>`;
   }).join('');
 }
 
-function setQ(id,v){
-  const n=Math.max(1,Math.floor(Number(v))||1);
-  if(cart[id])cart[id].qty=n;else qtys[id]=n;
-  renderGrid();bar();if($('ov').classList.contains('open'))renderSum();
+function setQ(i, val){
+  const p = all[i], v = curV(p); if (!v) return; const k = keyOf(p, v);
+  const n = Math.max(1, Math.floor(Number(val)) || 1);
+  if (cart[k]) cart[k].qty = n; else qtys[k] = n;
+  renderGrid(); bar(); if ($('ov').classList.contains('open')) renderSum();
 }
-function toggle(id){
-  const p=all.find(x=>x.id==id);
-  if(cart[id]){delete cart[id];toast('カートから出しました')}
-  else{cart[id]={p,qty:qtys[id]||1};toast('カートに入れました')}
-  renderGrid();bar();
+function toggle(i){
+  const p = all[i], v = curV(p), k = keyOf(p, v);
+  if (cart[k]){ delete cart[k]; toast('カートから出しました'); }
+  else { cart[k] = { p, v, qty: qtys[k] || 1 }; toast('カートに入れました'); }
+  renderGrid(); bar();
 }
-const sub=()=>Object.values(cart).reduce((s,e)=>s+e.p.price*e.qty,0);
-const tax=()=>Math.round(sub()*TAX);
+function delK(k){ delete cart[decodeURIComponent(k)]; renderGrid(); bar(); if (!Object.keys(cart).length) closeForm(); else renderSum(); }
+const sub = () => Object.values(cart).reduce((s, e) => s + e.v.price * e.qty, 0);
+const tax = () => Math.round(sub() * TAX);
 function bar(){
-  const n=Object.keys(cart).length;
-  $('barText').textContent=n?`${n}種類　${yen(sub()+tax())}（税込）`:'まだ入っていません';
+  const n = Object.keys(cart).length;
+  $('barText').textContent = n ? `${n}種類　${yen(sub() + tax())}（税込）` : 'まだ入っていません';
 }
 function renderSum(){
-  const es=Object.values(cart);
-  $('sum').innerHTML=es.map(({p,qty})=>`<div class="row"><div><div class="n">${esc(p.name)}</div>
-    <div>${esc([label(p),p.spec].filter(Boolean).join('　'))}</div><div>${yen(p.price)} × ${qty}</div>
-    <button class="del" onclick="toggle(${p.id});renderSum();if(!Object.keys(cart).length)closeForm()">これをやめる</button></div>
-    <div class="t">${yen(p.price*qty)}</div></div>`).join('')+
+  $('sum').innerHTML = Object.entries(cart).map(([k, { p, v, qty }]) => `<div class="row"><div><div class="n">${esc(p.name)}</div>
+    <div>${esc([vlabel(v), v.spec].filter(Boolean).join('　'))}</div><div>${yen(v.price)} × ${qty}</div>
+    <button class="del" onclick="delK('${encodeURIComponent(k)}')">これをやめる</button></div><div class="t">${yen(v.price * qty)}</div></div>`).join('') +
     `<div class="sub" style="margin-top:10px"><span>小計（税別）</span><span>${yen(sub())}</span></div>
-     <div class="sub"><span>消費税（10%）</span><span>${yen(tax())}</span></div>
-     <div class="tot"><span>合計（税込）</span><span>${yen(sub()+tax())}</span></div>`;
+     <div class="sub"><span>消費税（${Math.round(TAX*100)}%）</span><span>${yen(tax())}</span></div>
+     <div class="tot"><span>合計（税込）</span><span>${yen(sub() + tax())}</span></div>`;
 }
 function openForm(){
-  if(!Object.keys(cart).length){toast('先に「カートに入れる」を押してください');return}
-  renderSum();$('ov').classList.add('open');$('ov').scrollTop=0;
+  if (!Object.keys(cart).length){ toast('先に「カートに入れる」を押してください'); return; }
+  renderSum(); $('ov').classList.add('open'); $('ov').scrollTop = 0;
 }
-function closeForm(){$('ov').classList.remove('open')}
+function closeForm(){ $('ov').classList.remove('open'); }
 
 function submitOrder(){
-  const v=id=>$(id).value.trim();
-  if(!v('fCompany')){toast('会社名・屋号を入れてください');return}
-  if(!v('fName')){toast('ご担当者名を入れてください');return}
-  if(!v('fEmail')){toast('メールアドレスを入れてください');return}
-  const es=Object.values(cart);
-  const payload={order_id:'ORD-'+Date.now(),company:v('fCompany'),name:v('fName'),email:v('fEmail'),tel:v('fTel'),address:v('fAddress'),note:v('fNote'),
-    items:es.map(({p,qty})=>({id:p.id,name:p.name,variant_label:label(p),spec:p.spec||'',qty,unit_price:p.price,line_total:p.price*qty})),
-    subtotal:sub(),tax:tax(),total:sub()+tax()};
-  const done=()=>{closeForm();cart={};qtys={};renderGrid();bar();toast('ご注文を受け付けました。ありがとうございます')};
-  if(CONFIG.GAS_URL){
-    fetch(CONFIG.GAS_URL,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify(payload)})
-      .then(done).catch(()=>toast('送れませんでした。もう一度お試しください'));
-  }else{console.log('注文（GAS未設定）',payload);done()}
+  const g = id => $(id).value.trim();
+  if (!g('fCompany')){ toast('会社名・屋号を入れてください'); return; }
+  if (!g('fName')){ toast('ご担当者名を入れてください'); return; }
+  if (!g('fEmail')){ toast('メールアドレスを入れてください'); return; }
+  const es = Object.values(cart);
+  const payload = { order_id: 'ORD-' + Date.now(), company: g('fCompany'), name: g('fName'), email: g('fEmail'), tel: g('fTel'), address: g('fAddress'), note: g('fNote'),
+    items: es.map(({ p, v, qty }) => ({ product_id: p.id, name: p.name, variant_label: vlabel(v), spec: v.spec, qty, unit_price: v.price, line_total: v.price * qty })),
+    subtotal: sub(), tax: tax(), total: sub() + tax() };
+  const done = () => { closeForm(); cart = {}; qtys = {}; renderGrid(); bar(); toast('ご注文を受け付けました。ありがとうございます'); };
+  if (CONFIG.GAS_URL){
+    fetch(CONFIG.GAS_URL, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify(payload) })
+      .then(done).catch(() => toast('送れませんでした。もう一度お試しください'));
+  } else { console.log('注文（GAS未設定）', payload); done(); }
 }
-function toast(m){const t=$('toast');t.textContent=m;t.className='toast show';clearTimeout(t._t);t._t=setTimeout(()=>t.className='toast',3000)}
+function toast(m){ const t = $('toast'); t.textContent = m; t.className = 'toast show'; clearTimeout(t._t); t._t = setTimeout(() => t.className = 'toast', 3000); }
 
 async function init(){
-  $('coName').textContent=COMPANY.name;$('coTel').textContent=COMPANY.tel;$('coHours').textContent=COMPANY.hours;
-  $('coFoot').innerHTML=`${esc(COMPANY.address)}<br>${esc(COMPANY.email)}<br><a href="tokutei.html">特定商取引法に基づく表記</a>`;
-  all=SAMPLE;
-  if(CONFIG.GAS_URL){
-    try{const d=await (await fetch(CONFIG.GAS_URL)).json();const l=Array.isArray(d)?d:d.products;
-      if(Array.isArray(l)&&l.length)all=l.map(p=>({...p,price:Number(p.price)}))}catch(e){}
+  if (CONFIG.GAS_URL){
+    try { const d = await (await fetch(CONFIG.GAS_URL)).json(); if (d && Array.isArray(d.products) && d.products.length) DATA = d; } catch (e) {}
   }
-  build();renderCats();renderGrid();bar();
+  const s = DATA.settings || {};
+  const t = Number(String(s.tax_rate || '').replace('%', '')); if (t > 0) TAX = t > 1 ? t / 100 : t;
+  TEL = s.tel || ''; document.title = (s.company_name || '') + ' 資材のご注文';
+  $('coName').textContent = s.company_name || ''; $('coTel').textContent = TEL; $('coHours').textContent = s.hours || '';
+  if (s.lead_title) $('leadTitle').innerHTML = esc(s.lead_title).replace(/\n/g, '<br>');
+  if (s.lead_text) $('leadText').textContent = s.lead_text;
+  $('coFoot').innerHTML = `${esc(s.address)}<br>${esc(s.email)}<br><a href="tokutei.html">特定商取引法に基づく表記</a>`;
+  all = DATA.products.map(p => ({ ...p, consult: p.consult === true || p.consult === '○', variants: (p.variants || []).map(v => ({
+    v1: v.v1 || '', v2: v.v2 || '', price: v.price === '' || v.price == null ? null : Number(v.price), spec: v.spec || '', stock: v.stock || '○' })) })).filter(p => p.variants.length);
+  all.forEach(fix); renderCats(); renderGrid(); bar();
 }
 init();
 </script>
